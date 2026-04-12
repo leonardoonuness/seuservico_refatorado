@@ -1,9 +1,10 @@
 """
 Funções de segurança centralizadas:
-  - hash / verificação de senha com bcrypt
+  - hash / verificação de senha com SHA256 + bcrypt (compatível com senhas longas)
   - criação / decodificação de tokens JWT
 """
 import logging
+import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -19,13 +20,71 @@ _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 # ── Senha ─────────────────────────────────────────────────────────────────────
+# ESTRATÉGIA: SHA256 (pré-hash) + bcrypt (hash final)
+# Razão: bcrypt tem limite de 72 bytes. SHA256 reduz qualquer senha para 64 bytes hexadecimais.
+# Benefí­cio: compatível com senhas arbitrariamente longas sem perder segurança.
+
+def _pre_hash_sha256(plain: str) -> str:
+    """
+    Pré-hash com SHA256. Reduz qualquer senha para 64 bytes (hexadecimal).
+    Esta string é então passada ao bcrypt, garantindo sempre < 72 bytes.
+    """
+    return hashlib.sha256(plain.encode("utf-8")).hexdigest()
+
 
 def hash_password(plain: str) -> str:
-    return _pwd_context.hash(plain)
+    """
+    Cria hash seguro de senha com SHA256 + bcrypt.
+    
+    Processo:
+      1. plain → SHA256 (reduz para 64 bytes)
+      2. pre_hash → bcrypt (hash final armazenado no DB)
+    
+    Args:
+        plain: Senha em texto plano (qualquer comprimento)
+    
+    Returns:
+        Hash bcrypt (começa com $2b$...)
+    
+    Exceções:
+        ValueError: Se plain estiver vazio
+    """
+    if not plain:
+        raise ValueError("Senha não pode estar vazia")
+    
+    pre_hash = _pre_hash_sha256(plain)
+    return _pwd_context.hash(pre_hash)
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return _pwd_context.verify(plain, hashed)
+    """
+    Verifica senha contra hash usando SHA256 + bcrypt.
+    
+    Processo:
+      1. plain → SHA256 (mesmo que em hash_password)
+      2. pre_hash → bcrypt.verify(pre_hash, hashed)
+    
+    Args:
+        plain: Senha em texto plano
+        hashed: Hash armazenado no banco
+    
+    Returns:
+        True se senha está correta, False caso contrário
+    
+    Notas:
+        - Sempre executa bcrypt.verify() mesmo se plain estiver vazio (timing attack protection)
+        - Retorna False para qualquer erro (não revela diferença entre plain inválido e hash inválido)
+    """
+    try:
+        if not plain:
+            # Ainda executa verify com hash dummy para evitar timing attacks
+            return _pwd_context.verify("", hashed)
+        
+        pre_hash = _pre_hash_sha256(plain)
+        return _pwd_context.verify(pre_hash, hashed)
+    except Exception:
+        # Qualquer erro (hash corrompido, etc) retorna False sem revelar detalhes
+        return False
 
 
 # ── JWT ───────────────────────────────────────────────────────────────────────

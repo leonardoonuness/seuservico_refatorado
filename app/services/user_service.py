@@ -76,29 +76,39 @@ def authenticate(db: Session, email: str, password: str) -> User:
     """
     Valida credenciais.
     Retorna 401 para qualquer problema (não revela se o email existe).
+    
+    Timing attack protection: sempre valida a senha com um hash dummy mesmo se user=None.
     """
     user = get_by_email(db, email)
 
     # Sempre roda verify_password mesmo se user=None para evitar timing attack
-    dummy_hash = "$2b$12$" + "x" * 53
-    password_ok = verify_password(password, user.hashed_password if user else dummy_hash)
+    # Usa hash dummy se user não existir
+    if user:
+        password_ok = verify_password(password, user.hashed_password)
+    else:
+        # Dummy verification para não revelar diferença de timing
+        password_ok = verify_password(password, "$2b$12$" + "x" * 53)
 
     if not user or not password_ok:
+        logger.warning("Falha de autenticação para email=%s", email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="E-mail ou senha incorretos.",
         )
     if user.is_blocked:
         reason = user.block_reason or "sem motivo informado"
+        logger.warning("Tentativa de login com conta bloqueada: user_id=%s", user.id)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Conta bloqueada: {reason}.",
         )
     if not user.is_active:
+        logger.warning("Tentativa de login com conta desativada: user_id=%s", user.id)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Conta desativada.",
         )
+    logger.info("Autenticação bem-sucedida: user_id=%s", user.id)
     return user
 
 

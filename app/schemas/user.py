@@ -7,6 +7,11 @@ COMPATIBILIDADE FLUTTER:
 
   O campo "type" do Flutter mapeia para "user_type" no banco.
   Usamos model_validator para fazer essa tradução de forma transparente.
+
+SEGURANÇA DE SENHA:
+  - Mínimo: 6 caracteres (exigido por Flutter)
+  - Máximo: 128 caracteres (arbitrariamente longo, SHA256 reduz para 64 bytes no backend)
+  - Validação: sem requisitos especiais (a app escolhe sua política)
 """
 from datetime import datetime
 from typing import Literal, Optional
@@ -26,7 +31,13 @@ class UserRegisterRequest(BaseModel):
     """
     name: str = Field(..., min_length=2, max_length=200, examples=["João Silva"])
     email: EmailStr = Field(..., examples=["joao@email.com"])
-    password: str = Field(..., min_length=8, examples=["minhasenha123"])
+    password: str = Field(
+        ..., 
+        min_length=6, 
+        max_length=128,
+        examples=["minhasenha123"],
+        description="Mínimo 6 caracteres. Backend usa SHA256+bcrypt (seguro para qualquer comprimento)"
+    )
     type: UserType = Field(default="client", examples=["client"])
     phone: str = Field(..., min_length=8, max_length=30, examples=["98999999999"])
     city: str = Field(..., min_length=2, max_length=100, examples=["São Luís"])
@@ -43,6 +54,15 @@ class UserRegisterRequest(BaseModel):
     @classmethod
     def email_lower(cls, v: str) -> str:
         return v.lower().strip()
+
+    @field_validator("password")
+    @classmethod
+    def password_valid(cls, v: str) -> str:
+        """Validações de senha."""
+        if not v or not v.strip():
+            raise ValueError("Senha não pode estar vazia.")
+        # Se quiser requisitos específicos (maiúscula, número, etc), adicione aqui
+        return v
 
     @field_validator("phone")
     @classmethod
@@ -64,12 +84,19 @@ class UserRegisterRequest(BaseModel):
 # ── Login ──────────────────────────────────────────────────────────────────────
 class UserLoginRequest(BaseModel):
     email: EmailStr
-    password: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=1, max_length=128)
 
     @field_validator("email")
     @classmethod
     def email_lower(cls, v: str) -> str:
         return v.lower().strip()
+
+    @field_validator("password")
+    @classmethod
+    def password_not_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("Senha não pode estar vazia.")
+        return v
 
 
 # ── Refresh token ─────────────────────────────────────────────────────────────
@@ -79,8 +106,15 @@ class RefreshTokenRequest(BaseModel):
 
 # ── Troca de senha ─────────────────────────────────────────────────────────────
 class ChangePasswordRequest(BaseModel):
-    current_password: str
-    new_password: str = Field(..., min_length=8)
+    current_password: str = Field(..., min_length=1, max_length=128)
+    new_password: str = Field(..., min_length=6, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def new_password_valid(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("Nova senha não pode estar vazia.")
+        return v
 
 
 # ── Atualização de perfil ──────────────────────────────────────────────────────
