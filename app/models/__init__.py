@@ -6,5 +6,6 @@ from app.models.user import User
 from app.models.professional import Professional
 from app.models.service_request import ServiceRequest
 from app.models.review import Review
+from app.models.chat import Conversation, Message
 
-__all__ = ["User", "Professional", "ServiceRequest", "Review"]
+__all__ = ["User", "Professional", "ServiceRequest", "Review", "Conversation", "Message"]
