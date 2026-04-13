@@ -23,7 +23,7 @@ from app.db.session import engine
 # Importa todos os models para que Base.metadata os conheça
 import app.models  # noqa: F401
 
-from app.routes import auth, users, professionals, services, admin
+from app.routes import auth, users, professionals, services, admin, categories
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -97,6 +97,7 @@ app.include_router(users.router,         prefix=PREFIX)
 app.include_router(professionals.router, prefix=PREFIX)
 app.include_router(services.router,      prefix=PREFIX)
 app.include_router(admin.router,         prefix=PREFIX)
+app.include_router(categories.router,    prefix=PREFIX)
 
 
 # ── Health check ──────────────────────────────────────────────────────────────
